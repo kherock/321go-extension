@@ -1,0 +1,135 @@
+<!doctype html>
+<html>
+  <head>
+    <title>123go</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:400,100,300,500,700,900">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <link rel="stylesheet" href="../mdc/material-components-web.css">
+    <style>
+      html {
+        line-height: 1.15;
+      }
+      body {
+        font-size: initial;
+        overflow: hidden;
+        margin: 0;
+        background: white;
+      }
+
+      #popupView {
+        min-width: 280px;
+      }
+
+      #popupView:not(.in-room):not(.sliding) #roomView {
+        display: none;
+      }
+
+      .in-room:not(.sliding) #joinActions {
+        display: none;
+      }
+
+      .popup-header {
+        padding: 0 16px;
+      }
+
+      .popup-header img {
+        opacity: 0.8;
+      }
+
+      .room-id-text {
+        font-weight: bold;
+      }
+
+      button.mdc-list-item {
+        width: 100%;
+        background-color: transparent;
+        border: none;
+        font: inherit;
+        color: currentColor;
+      }
+
+      button.mdc-list-item:disabled {
+        color: var(--mdc-theme-text-disabled-on-light,rgba(0,0,0,.38));
+        pointer-events: none;
+      }
+
+      .list-input {
+        padding: 0 16px;
+        line-height: 1.15;        
+      }
+
+      .list-input .mdc-text-field {
+        width: 100%;
+      }
+
+      #joinActions button:not(:disabled) .mdc-list-item__graphic {
+        color: var(--mdc-theme-primary,#6200ee);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="popupView">
+      <div id="joinActions">
+        <ul class="mdc-list">
+          <button data-mdc-auto-init="MDCRipple"
+              id="createRoomBtn"
+              class="mdc-list-item"
+              disabled>
+              <i class="material-icons mdc-list-item__graphic">add_circle</i>
+              Create a room
+          </button>
+          <li class="mdc-list-divider"
+              role="divider">
+          </li>
+          <form id="joinRoomForm"
+              autocomplete="off">
+            <div class="list-input">
+              <div data-mdc-auto-init="MDCTextField"
+                  class="mdc-text-field mdc-text-field--outlined mdc-text-field--disabled">
+                <input name="roomId"
+                    id="input_roomId"
+                    class="mdc-text-field__input"
+                    type="text"
+                    pattern="[0-9A-Za-z]{5}"
+                    disabled>
+                <label class="mdc-text-field__label" for="input_roomId">Room code</label>
+                <div class="mdc-text-field__outline">
+                  <svg>
+                    <path class="mdc-text-field__outline-path"/>
+                  </svg>
+                </div>
+                <div class="mdc-text-field__idle-outline"></div>
+              </div>
+            </div>
+            <button data-mdc-auto-init="MDCRipple"
+                name="submitBtn"
+                class="mdc-list-item"
+                disabled>
+              <i class="material-icons mdc-list-item__graphic">forward</i>
+              Join room
+            </li>
+          </form>
+        </ul>
+      </div>
+      <div id="roomView">
+        <div class="popup-header">
+          <img src="../icon.svg">
+          <span>
+            Watching room
+            <span class="room-id-text"></span>    
+          </span>
+        </div>
+        <ul class="mdc-list">
+          <li data-mdc-auto-init="MDCRipple"
+              id="leaveRoomBtn"
+              class="mdc-list-item">
+            <i class="material-icons mdc-list-item__graphic">stop</i>
+            Stop session
+          </li>
+        </ul>
+      </div>
+    </div>
+    <script src="../mdc/material-components-web.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

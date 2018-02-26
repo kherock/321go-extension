@@ -1,0 +1,22 @@
+# OS
+# ===========
+.DS_Store
+ehthumbs.db
+Thumbs.db
+
+# General
+# =======
+*.log
+*.csv
+*.dat
+*.out
+*.pid
+*.gz
+*.tmp
+*.bak
+*.swp
+
+# Runtime data
+pids/
+*.pid
+*.seed
