@@ -110,7 +110,7 @@ async function updateBrowserActionPermissionStatus(tabId) {
 }
 
 function createTabSocket(tabId) {
-  const [, proto, hostname, port] = endpoint.match(/^(https?):\/\/([0-9A-Za-z-]+)(?::(\d+))?$/) || [];
+  const [, proto, hostname, port] = endpoint.match(/^(https?):\/\/([0-9A-Za-z-.]+)(?::(\d+))?$/) || [];
   const socket = promisifySocket(socketCluster.create({
     hostname: hostname,
     port: port,
