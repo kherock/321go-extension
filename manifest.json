@@ -1,28 +1,37 @@
 {
   "author": "Kyle Herock",
-  "name": "321go (Temporary Name)",
+  "name": "321go",
   "description": "Watch videos together with friends",
   "version": "1.0.0",
   "manifest_version": 2,
   "icons": {
-    "128": "icon_128.png"
+    "128": "images/logo_color_128dp.png"
   },
   "homepage_url": "https://321go.gq",
   "browser_action": {
-    "default_icon": "icon_128.png",
+    "default_icon": "images/ic_extension_rest_38dp.png",
     "default_title": "321go",
     "default_popup": "popup/popup.html"
   },
   "background": {
-    "scripts": ["lib/util-promisify.js", "lib/socketcluster.js", "background.js"]
+    "scripts": [
+      "lib/util-promisify.js",
+      "lib/chrome-extension-async.js",
+      "lib/socketcluster.js",
+      "background.js"
+    ],
+    "persistent": false
   },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content-script.js"],
-      "all_frames": true
-    }
-  ],
   "offline_enabled": false,
-  "permissions": []
+  "permissions": [
+    "tabs",
+    "https://www.rapidvideo.com/e/*",
+    "https://openload.co/embed/*",
+    "https://streamango.com/embed/*"
+  ],
+  "optional_permissions": [
+    "tabs",
+    "http://*/",
+    "https://*/"
+  ]
 }

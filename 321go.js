@@ -39,11 +39,14 @@
   function observeFrame(selector = 'video') {
     let listener;
     // poll the frame to observe until it says it's ready
-    const interval = setInterval(() => frame.postMessage({
-      runtimeId: chrome.runtime.id,
-      type: 'OBSERVE_MEDIA',
-      selector
-    }, '*'), 100);
+    const interval = setInterval(() => {
+      frame = element.contentWindow;
+      frame.postMessage({
+        runtimeId: chrome.runtime.id,
+        type: 'OBSERVE_MEDIA',
+        selector
+      }, '*');
+    }, 100);
     window.addEventListener('message', listener = (ev) => {
       const message = ev.data;
       if (ev.source !== frame || message.runtimeId !== chrome.runtime.id) return;
@@ -71,7 +74,6 @@
         attributeFilter: ['src']
       });
       if (element instanceof HTMLIFrameElement) {
-        frame = element.contentWindow;
         observeFrame();
       } else {
         observeElement();
@@ -124,24 +126,11 @@
     port.onMessage.addListener((message) => {
       switch (message.type) {
       case 'OBSERVE_MEDIA':
-        if (message.href) {
-          if (location.href !== message.href) {
-            location.href = message.href;
-          }
-        } else {
-          port.postMessage({
-            type: 'URL',
-            href: location.href
-          });
-        }
-        return observeMedia();
+        observeMedia();
+        break;
       case 'UNOBSERVE_MEDIA':
-        return unobserveMedia();
-      case 'URL':
-        if (location.href !== message.href) {
-          location.href = message.href;
-        }
-        return;
+        unobserveMedia();
+        break;
       default:
         if (frame) {
           message.runtimeId = chrome.runtime.id;
@@ -149,7 +138,7 @@
         } else if (element) {
           handleMessage(message);
         }
-        return;
+        break;
       }
     });
     // listen for messages from child frames
@@ -164,8 +153,8 @@
         delete message.runtimeId;
         return port.postMessage(message);
       }
-
     });
+    return top.location.href;
   } else {
     port = {
       postMessage(message) {
@@ -179,9 +168,11 @@
       if (ev.source !== top || message.runtimeId !== chrome.runtime.id) return;
       switch (message.type) {
       case 'OBSERVE_MEDIA':
-        return observeMedia(message.selector);
+        observeMedia(message.selector);
+        break;
       case 'UNOBSERVE_MEDIA':
-        return unobserveMedia();
+        unobserveMedia();
+        break;
       default:
         if (element) {
           handleMessage(message);
@@ -190,5 +181,6 @@
       }
       port.postMessage({ type: 'FRAME_READY' });
     });
+    return self.location.href;
   }
 })();
