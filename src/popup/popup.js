@@ -1,6 +1,16 @@
 'use strict';
 
-mdc.autoInit();
+import './popup.scss';
+
+import 'chrome-extension-async';
+import mdcAutoInit from '@material/auto-init';
+import { MDCRipple } from '@material/ripple';
+import { MDCTextField } from '@material/textfield';
+
+mdcAutoInit.register('MDCRipple', MDCRipple);
+mdcAutoInit.register('MDCTextField', MDCTextField);
+
+mdcAutoInit();
 
 const port = chrome.runtime.connect();
 

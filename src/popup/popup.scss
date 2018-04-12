@@ -1,0 +1,97 @@
+@import '@material/button/mdc-button';
+@import '@material/floating-label/mdc-floating-label';
+@import '@material/list/mdc-list';
+@import '@material/notched-outline/mdc-notched-outline';
+@import '@material/textfield/mdc-text-field';
+
+html {
+  line-height: 1.15;
+}
+body {
+  font-size: initial;
+  overflow: hidden;
+  margin: 0;
+  background: white;
+}
+
+#popupView {
+  min-width: 280px;
+
+  &:not(.in-room):not(.sliding) #roomView {
+    display: none;
+  }
+}
+
+
+.in-room:not(.sliding) #joinActions {
+  display: none;
+}
+
+.popup-header {
+  padding: 0 16px;
+
+  img {
+    opacity: 0.8;
+  }
+}
+
+.room-id-text {
+  font-weight: bold;
+}
+
+button.mdc-list-item {
+  width: 100%;
+  background-color: transparent;
+  border: none;
+  font: inherit;
+  color: currentColor;
+
+  &:disabled {
+    color: var(--mdc-theme-text-disabled-on-light,rgba(0,0,0,.38));
+    pointer-events: none;
+  }
+}
+
+.list-input {
+  padding: 0 16px;
+  line-height: 1.15;        
+
+  .mdc-text-field {
+    width: 100%;
+  }
+}
+
+#joinActions button:not(:disabled) .mdc-list-item__graphic {
+  color: var(--mdc-theme-primary,#6200ee);
+}
+
+.room-graphic {
+  display: block;
+  text-align: center;
+
+  &.active {
+    margin: auto;
+    width: 160px;
+  }
+  
+  &.error {
+    font-size: 160px;
+    color: #5d5d5d;
+  }
+}
+
+#roomView {
+  &.error .room-graphic.active {
+    display: none;
+  }    
+
+  &:not(.error) .room-graphic.error {
+    display: none;
+  }
+
+  &:not(.permission-error) .request-permission {
+    display: none;
+  }    
+}
+
+

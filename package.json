@@ -1,0 +1,46 @@
+{
+  "name": "321go-extension",
+  "version": "1.1.2",
+  "description": "Watch videos together with friends",
+  "dependencies": {
+    "@material/auto-init": "^0.34.0",
+    "@material/button": "^0.34.1",
+    "@material/floating-label": "^0.34.0",
+    "@material/list": "^0.34.1",
+    "@material/notched-outline": "^0.34.0",
+    "@material/textfield": "^0.34.1",
+    "chrome-extension-async": "^3.2.4",
+    "cssnano": "^4.0.0-rc.2",
+    "socketcluster-client": "^11.0.1",
+    "util-promisify": "^2.1.0"
+  },
+  "devDependencies": {
+    "css-loader": "^0.28.11",
+    "eslint": "^4.19.1",
+    "eslint-config-airbnb-base": "^12.1.0",
+    "eslint-plugin-import": "^2.10.0",
+    "mini-css-extract-plugin": "^0.4.0",
+    "node-sass": "^4.8.3",
+    "optimize-css-assets-webpack-plugin": "^4.0.0",
+    "sass-loader": "^6.0.7",
+    "semistandard": "^12.0.1",
+    "uglifyjs-webpack-plugin": "^1.2.4",
+    "webpack": "^4.5.0",
+    "webpack-cli": "^2.0.14"
+  },
+  "scripts": {
+    "build": "webpack --env production",
+    "watch": "webpack --watch",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/specialkk/321go-extension.git"
+  },
+  "author": "Kyle Herock",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/specialkk/321go-extension/issues"
+  },
+  "homepage": "https://github.com/specialkk/321go-extension#readme"
+}

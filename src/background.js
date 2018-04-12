@@ -1,6 +1,6 @@
-'use strict';
-
-const endpoint = 'http://localhost:3000';
+import 'chrome-extension-async';
+import promisify from 'util-promisify';
+import { SCSocketCreator } from 'socketcluster-client';
 
 const sockets = new Map();
 
@@ -8,11 +8,11 @@ function promisifySocket(socket) {
   socket.emit = socket.emit.bind(socket);
   socket.channel = function () {
     return promisifyChannel(Object.getPrototypeOf(socket).channel.apply(this, arguments));
-  }
+  };
   socket.publish = socket.publish.bind(socket);
   socket.subscribe = function () {
     return promisifyChannel(Object.getPrototypeOf(socket).subscribe.apply(this, arguments));
-  }
+  };
   return socket;
 }
 
@@ -51,7 +51,7 @@ async function getTab(tabId) {
 
 /**
  * Navigates a tab to an optionally specified url and waits for the status to be complete.
- * @param {number} tabId 
+ * @param {number} tabId
  * @param {string} [url]
  * @returns {Promise<Tab>} A promise that resolves with the updated tab.
  */
@@ -66,16 +66,17 @@ async function navigateTab(tabId, url) {
     return null;
   }
   if (tab.status === 'loading') {
-    let onUpdated, onRemoved;
+    let onUpdated;
+    let onRemoved;
     tab = await Promise.race([
-      new Promise(resolve => chrome.tabs.onUpdated.addListener(onUpdated = (tabId, changeInfo, updatedTab) => {
-        if (tabId !== tab.id || changeInfo.status !== 'complete') return;
+      new Promise(resolve => chrome.tabs.onUpdated.addListener(onUpdated = (id, changeInfo, updatedTab) => {
+        if (id !== tab.id || changeInfo.status !== 'complete') return;
         resolve(updatedTab);
       })),
-      new Promise(resolve => chrome.tabs.onRemoved.addListener(onRemoved = (tabId) => {
-        if (tabId !== tab.id) return;
+      new Promise(resolve => chrome.tabs.onRemoved.addListener(onRemoved = (id) => {
+        if (id !== tab.id) return;
         resolve(null);
-      }))
+      })),
     ]);
     chrome.tabs.onUpdated.removeListener(onUpdated);
     chrome.tabs.onRemoved.removeListener(onRemoved);
@@ -84,38 +85,38 @@ async function navigateTab(tabId, url) {
 }
 
 async function execContentScript(tabId) {
-  return await chrome.tabs.executeScript(tabId, {
+  return chrome.tabs.executeScript(tabId, {
     file: '321go.js',
-    allFrames: true
+    allFrames: true,
   });
 }
 
 async function setBrowserActionIcon(tabId, state = 'active') {
-  return await chrome.browserAction.setIcon({
+  return chrome.browserAction.setIcon({
     path: `./images/ic_extension_${state}_38dp.png`,
-    tabId
+    tabId,
   });
 }
 
 async function updateBrowserActionPermissionStatus(tabId) {
   const tab = await chrome.tabs.get(tabId);
   const hasPermission = await chrome.permissions.contains({
-    origins: [tab.url]
+    origins: [tab.url],
   });
   await chrome.browserAction.setBadgeText({
     text: !hasPermission ? '!' : '',
-    tabId: tab.id
+    tabId: tab.id,
   });
   return hasPermission;
 }
 
 function createTabSocket(tabId) {
-  const [, proto, hostname, port] = endpoint.match(/^(https?):\/\/([0-9A-Za-z-.]+)(?::(\d+))?$/) || [];
-  const socket = promisifySocket(socketCluster.create({
-    hostname: hostname,
-    port: port,
+  const [, proto, hostname, port] = process.env.ENDPOINT.match(/^(https?):\/\/([0-9A-Za-z-.]+)(?::(\d+))?$/) || [];
+  const socket = promisifySocket(SCSocketCreator.create({
+    hostname,
+    port,
     secure: proto === 'https',
-    multiplex: false
+    multiplex: false,
   }));
   socket.tabId = tabId;
   sockets.set(tabId, socket);
@@ -132,17 +133,17 @@ function createTabSocket(tabId) {
 }
 
 async function fetchNewRoom() {
-  const res = await fetch(endpoint + '/', { method: 'POST' });
+  const res = await fetch(`${process.env.ENDPOINT}/`, { method: 'POST' });
   if (!res.ok) throw new Error(res.statusText);
-  return await res.text();
+  return res.text();
 }
 
 /**
  * Subscribes a tab to the events in a room.
  * This creates a WebSocket for the passed in tabId if it doesn't exist yet
  * and executes the content script in the tab if no port has been established yet.
- * @param {number} tabId 
- * @param {string} roomId 
+ * @param {number} tabId
+ * @param {string} roomId
  */
 async function joinRoom(tabId, roomId) {
   const socket = sockets.get(tabId) || createTabSocket(tabId);
@@ -156,7 +157,7 @@ async function joinRoom(tabId, roomId) {
 /**
  * Destroys the channel associated with the passed in tab.
  * The connection to the tab's content script is left intact.
- * @param {number} tabId 
+ * @param {number} tabId
  */
 function leaveRoom(tabId) {
   const socket = sockets.get(tabId);
@@ -180,7 +181,7 @@ async function handleChannelMessage(socket, message) {
       // this is a new room, let's give it a URL to work with
       await promisify(socket.publish)(socket.room.id, {
         type: 'URL',
-        href: tab.url
+        href: tab.url,
       });
     }
     // execute the content script if it hasn't been injected into the page
@@ -191,7 +192,7 @@ async function handleChannelMessage(socket, message) {
       } else if (socket.popup) {
         socket.popup.postMessage({
           type: 'PERMISSION_REQUIRED',
-          origin: message.href
+          origin: message.href,
         });
       }
     }
@@ -212,8 +213,8 @@ async function handleChannelMessage(socket, message) {
 
 /**
  * onMessage handler for events from the content script.
- * @param {object} message 
- * @param {Port} port 
+ * @param {object} message
+ * @param {Port} port
  */
 async function handleTabMessage(message, port) {
   const socket = sockets.get(port.sender.tab.id);
@@ -229,8 +230,8 @@ async function handleTabMessage(message, port) {
 
 /**
  * onMessage handler for events from the popup page.
- * @param {object} message 
- * @param {Port} port 
+ * @param {object} message
+ * @param {Port} port
  */
 async function handlePopupMessage(message, port) {
   try {
@@ -263,17 +264,19 @@ async function handlePopupMessage(message, port) {
       port.postMessage({ type: 'LEAVE_ROOM' });
       leaveRoom(message.tab);
       break;
+    default:
+      console.error('Encountered unkown popup message:', message);
     }
   } catch (err) {
     console.error(err.stack);
-  }  
+  }
 }
 
 /**
  * onConnect handler for new content scripts.
  * If the tab disconnects the port (from navigating or refreshing the page),
  * a new content script is injected if the tab still exists and is joined to a room.
- * @param {Port} port 
+ * @param {Port} port
  */
 function initTabPort(port) {
   const { tab } = port.sender;
@@ -287,16 +290,16 @@ function initTabPort(port) {
   port.onMessage.addListener(handleTabMessage);
   port.onDisconnect.addListener(async () => {
     socket.port = null;
-    const tab = await navigateTab(socket.tabId);
-    if (tab && socket.room.id) {
-      execContentScript(tab.id);
+    const newTab = await navigateTab(socket.tabId);
+    if (newTab && socket.room.id) {
+      execContentScript(newTab.id);
     }
   });
 }
 
 /**
  * onConnect handler for new popup windows.
- * @param {Port} port 
+ * @param {Port} port
  */
 function initPopupPort(port) {
   const roomMap = {};

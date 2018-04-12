@@ -1,3 +1,9 @@
+# Build files
+dist/**/*.css
+dist/**/*.js
+dist/**/*.map
+dist/**/*.LICENSE
+
 # OS
 # ===========
 .DS_Store
@@ -16,7 +22,39 @@ Thumbs.db
 *.bak
 *.swp
 
+### Node.js
+# Logs
+logs/
+*.log
+npm-debug.log*
+
 # Runtime data
 pids/
 *.pid
 *.seed
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Optional npm cache directory
+.npm/
+
+# Optional REPL history
+.node_repl_history
+
+# IDEs and editors
+/.idea
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# IDE - VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json

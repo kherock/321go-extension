@@ -4,7 +4,6 @@
     <title>321go</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:400,100,300,500,700,900">
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
-    <link rel="stylesheet" href="../mdc/material-components-web.css">
     <link rel="stylesheet" href="popup.css">
   </head>
   <body>
@@ -32,13 +31,13 @@
                     type="text"
                     pattern="[0-9A-Za-z]{5}"
                     disabled>
-                <label class="mdc-text-field__label" for="input_roomId">Room code</label>
-                <div class="mdc-text-field__outline">
+                <label class="mdc-floating-label" for="input_roomId">Room code</label>
+                <div class="mdc-notched-outline">
                   <svg>
-                    <path class="mdc-text-field__outline-path"/>
+                    <path class="mdc-notched-outline__path"/>
                   </svg>
                 </div>
-                <div class="mdc-text-field__idle-outline"></div>
+                <div class="mdc-notched-outline__idle"></div>
               </div>
             </div>
             <button data-mdc-auto-init="MDCRipple"
@@ -76,8 +75,6 @@
         </ul>
       </div>
     </div>
-    <script src="../mdc/material-components-web.js"></script>
-    <script src="../lib/chrome-extension-async.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>
