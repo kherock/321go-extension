@@ -42,7 +42,7 @@ function initView(tab, roomId) {
     await ensurePermissions(tab.url);
     port.postMessage({
       tab: tab.id,
-      type: 'CREATE_ROOM'
+      type: 'CREATE_ROOM',
     });
   });
   joinRoomForm.addEventListener('submit', async (ev) => {
@@ -53,8 +53,8 @@ function initView(tab, roomId) {
     port.postMessage({
       tab: tab.id,
       type: 'JOIN_ROOM',
-      roomId: roomIdControl.value
-    });    
+      roomId: roomIdControl.value,
+    });
   });
   requestPermissionBtn.addEventListener('click', async (ev) => {
     await ensurePermissions(tab.url);
@@ -62,13 +62,13 @@ function initView(tab, roomId) {
     roomView.classList.remove('permission-error');
     port.postMessage({
       tab: tab.id,
-      type: 'RESYNC_MEDIA'
+      type: 'RESYNC_MEDIA',
     });
   });
   leaveRoomBtn.addEventListener('click', (ev) => {
     port.postMessage({
       tab: tab.id,
-      type: 'LEAVE_ROOM'
+      type: 'LEAVE_ROOM',
     });
   });
 
@@ -108,7 +108,7 @@ function toggleRoomView(force = !popupView.classList.contains('in-room')) {
   if (!force) {
     createRoomBtn.disabled = false;
     roomIdControl.disabled = false;
-    submitBtn.disabled = !roomIdControl.value || !roomIdControl.valid;    
+    submitBtn.disabled = !roomIdControl.value || !roomIdControl.valid;
   }
 }
 

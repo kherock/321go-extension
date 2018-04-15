@@ -1,7 +1,7 @@
 'use strict';
 
 const CssExtractPlugin = require('mini-css-extract-plugin');
-const OptimizeCSSAssetsPlugin = require('optimize-css-assets-webpack-plugin');
+const OptimizeCssAssetsPlugin = require('optimize-css-assets-webpack-plugin');
 const UglifyJsPlugin = require('uglifyjs-webpack-plugin');
 const path = require('path');
 const { EnvironmentPlugin } = require('webpack');
@@ -16,7 +16,7 @@ module.exports = env => ({
     path: path.join(__dirname, 'dist'),
     filename: '[name].js',
   },
-  mode: env || 'development',
+  mode: env === 'production' ? 'production' : 'development',
   devtool: env === 'production' ? 'inline-source-map' : 'inline-cheap-module-source-map',
   optimization: {
     minimizer: [
@@ -26,7 +26,7 @@ module.exports = env => ({
         sourceMap: env !== 'production',
         extractComments: true,
       }),
-      new OptimizeCSSAssetsPlugin({
+      new OptimizeCssAssetsPlugin({
         cssProcessor: require('cssnano'),
         cssProcessorOptions: {
           map: env !== 'production',

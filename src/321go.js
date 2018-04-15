@@ -1,12 +1,47 @@
-let port;
-let element;
-let frame;
+import { Subscription, fromEvent, fromEventPattern, interval } from 'rxjs';
+import {
+  filter,
+  finalize,
+  map,
+  mergeMap,
+  take,
+  takeUntil,
+  takeWhile,
+  tap,
+} from 'rxjs/operators';
+
+import { Broker } from './broker';
+
+export let href = self.location.href;
+
+// communication channel between window frames and the chrome background script
+const port = self === top ? chrome.runtime.connect() : undefined;
+const portBroker = self === top
+  ? new Broker( // top frame
+    message => port.postMessage(message),
+    fromEventPattern(
+      handler => port.onMessage.addListener(handler),
+      handler => port.onMessage.removeListener(handler),
+      message => message,
+    ).pipe(takeUntil(fromEventPattern(handler => port.onDisconnect.addListener(handler)))),
+  )
+  : new Broker( // sub-frame
+    message => top.postMessage({ ...message, runtimeId: chrome.runtime.id }, '*'),
+    fromEvent(self, 'message').pipe(
+      filter(ev => ev.source === top && ev.data.runtimeId === chrome.runtime.id),
+      map(ev => ev.data),
+    ).pipe(takeWhile(message => message.type !== 'FRAME_DESTROY')),
+  );
+
+let frameBroker;
+
+let mediaSubscription;
+
+let mediaElement;
 let suppressEvents = false;
 
-export let url;
-
 const observer = new MutationObserver(() => {
-  port.postMessage({
+  portBroker.publish({
     type: 'URL',
     href: location.href,
   });
@@ -15,49 +50,54 @@ const observer = new MutationObserver(() => {
 
 function playingHandler(ev) {
   if (suppressEvents) return;
-  port.postMessage({
+  portBroker.publish({
     type: 'PLAYING',
-    currentTime: element.currentTime,
+    currentTime: mediaElement.currentTime,
   });
   console.log('playing');
 }
 
 function pauseHandler(ev) {
   if (suppressEvents) return;
-  port.postMessage({
+  portBroker.publish({
     type: 'PAUSE',
-    currentTime: element.currentTime,
+    currentTime: mediaElement.currentTime,
   });
   console.log('pause');
 }
 
-function observeElement() {
-  element.addEventListener('playing', playingHandler);
-  element.addEventListener('pause', pauseHandler);
+function observeElement(element) {
+  mediaSubscription = new Subscription();
+  mediaSubscription.add(fromEvent(element, 'playing').subscribe(playingHandler));
+  mediaSubscription.add(fromEvent(element, 'pause').subscribe(pauseHandler));
 }
 
-function observeFrame(selector = 'video') {
-  let listener;
+async function observeFrame(element, selector = 'video') {
   // poll the frame to observe until it says it's ready
-  const interval = setInterval(() => {
-    frame = element.contentWindow;
-    frame.postMessage({
-      runtimeId: chrome.runtime.id,
-      type: 'OBSERVE_MEDIA',
-      selector,
-    }, '*');
-  }, 100);
-  window.addEventListener('message', listener = (ev) => {
-    const message = ev.data;
-    if (ev.source !== frame || message.runtimeId !== chrome.runtime.id) return;
-    if (message.type === 'FRAME_READY') {
-      clearInterval(interval);
-      window.removeEventListener('message', listener);
-    }
-  });
+  const runtimeId = chrome.runtime.id;
+  return interval(100).pipe(
+    map(() => element.contentWindow),
+    tap(frame => frame.postMessage({ type: 'OBSERVE_MEDIA', selector, runtimeId }, '*')),
+    mergeMap(frame => fromEvent(self, 'message').pipe(
+      filter(ev => ev.source === frame && ev.data.runtimeId === runtimeId),
+      map(ev => ev.data),
+      filter(message => message.type === 'FRAME_READY'),
+      map(() => new Broker(
+        message => frame.postMessage({ ...message, runtimeId }, '*'),
+        fromEvent(self, 'message').pipe(
+          filter(ev => ev.source === frame && ev.data.runtimeId === runtimeId),
+          map(ev => ev.data),
+          takeUntil(portBroker.sub.toPromise()),
+          finalize(() => frame.postMessage({ type: 'FRAME_DESTROY', runtimeId }, '*')),
+        ),
+      )),
+    )),
+    take(1),
+  ).toPromise();
 }
 
-function observeMedia(selector) {
+async function observeMedia(selector) {
+  let element;
   if (selector) {
     element = document.querySelector(selector);
   } else {
@@ -74,42 +114,49 @@ function observeMedia(selector) {
       attributeFilter: ['src'],
     });
     if (element instanceof HTMLIFrameElement) {
-      observeFrame();
+      frameBroker = await observeFrame(element);
+      // listen for messages from sub-frames
+      frameBroker.subscribe((message) => {
+        switch (message.type) {
+        case 'FRAME_READY':
+          return;
+        default:
+          delete message.runtimeId;
+          return portBroker.publish(message);
+        }
+      });
     } else {
-      observeElement();
+      observeElement(element);
     }
   }
+  return element;
 }
 
 function unobserveMedia() {
   observer.disconnect();
-  if (frame) {
-    frame.postMessage({
-      runtimeId: chrome.runtime.id,
-      type: 'UNOBSERVE_MEDIA',
-    }, '*');
-    frame = undefined;
-  } else if (element) {
-    element.removeEventListener('playing', playingHandler);
-    element.removeEventListener('pause', pauseHandler);
+  if (frameBroker) {
+    frameBroker.publish({ type: 'UNOBSERVE_MEDIA' });
+    frameBroker = undefined;
+  } else if (mediaElement) {
+    mediaSubscription.unsubscribe();
+    mediaSubscription = null;
   }
-  element = undefined;
 }
 
 async function handleMessage(message) {
   try {
     switch (message.type) {
     case 'PLAYING':
-      if (!element) return;
+      if (!mediaElement) return;
       suppressEvents = true;
-      element.currentTime = message.currentTime;
-      await element.play();
+      mediaElement.currentTime = message.currentTime;
+      await mediaElement.play();
       break;
     case 'PAUSE':
-      if (!element) return;
+      if (!mediaElement) return;
       suppressEvents = true;
-      element.currentTime = message.currentTime;
-      await element.pause();
+      mediaElement.currentTime = message.currentTime;
+      await mediaElement.pause();
       break;
     default:
       console.error('Receieved unexpected message:', message);
@@ -121,67 +168,30 @@ async function handleMessage(message) {
   }
 }
 
-if (self === top) {
-  // Only the top context connects to the background script
-  port = chrome.runtime.connect();
-
-  port.onMessage.addListener((message) => {
+portBroker.pipe(finalize(unobserveMedia)).subscribe(async (message) => {
+  try {
     switch (message.type) {
     case 'OBSERVE_MEDIA':
-      observeMedia();
+      mediaElement = await observeMedia(message.selector);
+      if (self !== top) {
+        // this is a sub-frame, so send the ready message
+        portBroker.publish({ type: 'FRAME_READY' });
+      }
       break;
     case 'UNOBSERVE_MEDIA':
       unobserveMedia();
+      mediaElement = undefined;
       break;
     default:
-      if (frame) {
-        message.runtimeId = chrome.runtime.id;
-        frame.postMessage(message, '*');
-      } else if (element) {
-        handleMessage(message);
+      if (frameBroker) {
+        // forward the message to the sub-frame
+        frameBroker.publish(message);
+      } else if (mediaElement) {
+        await handleMessage(message);
       }
       break;
     }
-  });
-  // listen for messages from child frames
-  top.addEventListener('message', (ev) => {
-    const message = ev.data;
-    if (ev.source !== frame || message.runtimeId !== chrome.runtime.id) return;
-
-    switch (message.type) {
-    case 'FRAME_READY':
-      return;
-    default:
-      delete message.runtimeId;
-      return port.postMessage(message);
-    }
-  });
-  url = top.location.href;
-} else {
-  port = {
-    postMessage(message) {
-      message.runtimeId = chrome.runtime.id;
-      return top.postMessage(message, '*');
-    },
-  };
-
-  self.addEventListener('message', (ev) => {
-    const message = ev.data;
-    if (ev.source !== top || message.runtimeId !== chrome.runtime.id) return;
-    switch (message.type) {
-    case 'OBSERVE_MEDIA':
-      observeMedia(message.selector);
-      break;
-    case 'UNOBSERVE_MEDIA':
-      unobserveMedia();
-      break;
-    default:
-      if (element) {
-        handleMessage(message);
-      }
-      return;
-    }
-    port.postMessage({ type: 'FRAME_READY' });
-  });
-  url = self.location.href;
-}
+  } catch (err) {
+    console.error(err.stack);
+  }
+});

@@ -12,6 +12,11 @@
       "type": "npm",
       "script": "watch",
       "problemMatcher": []
+    },
+    {
+      "type": "npm",
+      "script": "watch:offline",
+      "problemMatcher": []
     }
   ]
 }
