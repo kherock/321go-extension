@@ -1,4 +1,4 @@
-import { Subscription, fromEvent, fromEventPattern, interval } from 'rxjs';
+import { Subject, Subscription, fromEvent, fromEventPattern, interval } from 'rxjs';
 import {
   filter,
   finalize,
@@ -10,23 +10,21 @@ import {
   tap,
 } from 'rxjs/operators';
 
-import { Broker } from './broker';
-
 export let href = self.location.href;
 
 // communication channel between window frames and the chrome background script
 const port = self === top ? chrome.runtime.connect() : undefined;
 const portBroker = self === top
-  ? new Broker( // top frame
-    message => port.postMessage(message),
+  ? Subject.create( // top frame
+    new Subject().subscribe(message => port.postMessage(message)),
     fromEventPattern(
       handler => port.onMessage.addListener(handler),
       handler => port.onMessage.removeListener(handler),
       message => message,
     ).pipe(takeUntil(fromEventPattern(handler => port.onDisconnect.addListener(handler)))),
   )
-  : new Broker( // sub-frame
-    message => top.postMessage({ ...message, runtimeId: chrome.runtime.id }, '*'),
+  : Subject.create( // sub-frame
+    new Subject().subscribe(message => top.postMessage({ ...message, runtimeId: chrome.runtime.id }, '*')),
     fromEvent(self, 'message').pipe(
       filter(ev => ev.source === top && ev.data.runtimeId === chrome.runtime.id),
       map(ev => ev.data),
@@ -41,7 +39,7 @@ let mediaElement;
 let suppressEvents = false;
 
 const observer = new MutationObserver(() => {
-  portBroker.publish({
+  portBroker.next({
     type: 'URL',
     href: location.href,
   });
@@ -50,7 +48,7 @@ const observer = new MutationObserver(() => {
 
 function playingHandler(ev) {
   if (suppressEvents) return;
-  portBroker.publish({
+  portBroker.next({
     type: 'PLAYING',
     currentTime: mediaElement.currentTime,
   });
@@ -59,7 +57,7 @@ function playingHandler(ev) {
 
 function pauseHandler(ev) {
   if (suppressEvents) return;
-  portBroker.publish({
+  portBroker.next({
     type: 'PAUSE',
     currentTime: mediaElement.currentTime,
   });
@@ -82,12 +80,12 @@ async function observeFrame(element, selector = 'video') {
       filter(ev => ev.source === frame && ev.data.runtimeId === runtimeId),
       map(ev => ev.data),
       filter(message => message.type === 'FRAME_READY'),
-      map(() => new Broker(
-        message => frame.postMessage({ ...message, runtimeId }, '*'),
+      map(() => Subject.create(
+        new Subject().subscribe(message => frame.postMessage({ ...message, runtimeId }, '*')),
         fromEvent(self, 'message').pipe(
           filter(ev => ev.source === frame && ev.data.runtimeId === runtimeId),
           map(ev => ev.data),
-          takeUntil(portBroker.sub.toPromise()),
+          takeUntil(portBroker.toPromise()),
           finalize(() => frame.postMessage({ type: 'FRAME_DESTROY', runtimeId }, '*')),
         ),
       )),
@@ -122,7 +120,7 @@ async function observeMedia(selector) {
           return;
         default:
           delete message.runtimeId;
-          return portBroker.publish(message);
+          return portBroker.next(message);
         }
       });
     } else {
@@ -135,7 +133,7 @@ async function observeMedia(selector) {
 function unobserveMedia() {
   observer.disconnect();
   if (frameBroker) {
-    frameBroker.publish({ type: 'UNOBSERVE_MEDIA' });
+    frameBroker.next({ type: 'UNOBSERVE_MEDIA' });
     frameBroker = undefined;
   } else if (mediaElement) {
     mediaSubscription.unsubscribe();
@@ -176,7 +174,7 @@ portBroker.pipe(finalize(unobserveMedia)).subscribe(async (message) => {
       mediaElement = await observeMedia(message.selector);
       if (self !== top) {
         // this is a sub-frame, so send the ready message
-        portBroker.publish({ type: 'FRAME_READY' });
+        portBroker.next({ type: 'FRAME_READY' });
       }
       break;
     case 'UNOBSERVE_MEDIA':
@@ -186,7 +184,7 @@ portBroker.pipe(finalize(unobserveMedia)).subscribe(async (message) => {
     default:
       if (frameBroker) {
         // forward the message to the sub-frame
-        frameBroker.publish(message);
+        frameBroker.next(message);
       } else if (mediaElement) {
         await handleMessage(message);
       }
