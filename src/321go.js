@@ -172,6 +172,7 @@ portBroker.pipe(finalize(unobserveMedia)).subscribe(async (message) => {
   try {
     switch (message.type) {
     case 'OBSERVE_MEDIA':
+      if (mediaElement) return;
       mediaElement = await observeMedia(message.selector);
       if (self !== top) {
         // this is a sub-frame, so send the ready message
