@@ -9,7 +9,7 @@ const { EnvironmentPlugin } = require('webpack');
 module.exports = env => ({
   entry: {
     '321go': path.join(__dirname, './src/321go.js'),
-    'background': path.join(__dirname, './src/background.js'),
+    'background': path.join(__dirname, './src/background/index.js'),
     'popup/popup': path.join(__dirname, './src/popup/popup.js'),
   },
   output: {
@@ -64,8 +64,8 @@ module.exports = env => ({
     }),
     new EnvironmentPlugin({
       ENDPOINT: env === 'offline'
-        ? 'http://localhost:4000'
-        : 'https://321go.gq',
+        ? 'http://localhost:4000/'
+        : 'https://321go.gq/',
     }),
   ],
 });

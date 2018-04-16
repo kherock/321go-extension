@@ -1,41 +1,4 @@
-import promisify from 'util-promisify';
-
-export function promisifySocket(socket) {
-  socket.emit = socket.emit.bind(socket);
-  socket.channel = function () {
-    return promisifyChannel(Object.getPrototypeOf(socket).channel.apply(this, arguments));
-  };
-  socket.publish = socket.publish.bind(socket);
-  socket.subscribe = function () {
-    return promisifyChannel(Object.getPrototypeOf(socket).subscribe.apply(this, arguments));
-  };
-  return socket;
-}
-
-export function promisifyChannel(channel) {
-  channel.subscribe = channel.subscribe.bind(channel);
-  channel.subscribe[promisify.custom] = function () {
-    if (this.state === this.SUBSCRIBED) return Promise.resolve(this.name);
-    return new Promise((resolve, reject) => {
-      const doResolve = (channelName) => {
-        if (channelName !== this.name) return;
-        this.client.off('subscribe', doResolve);
-        this.client.off('subscribeFail', doReject);
-        resolve(channelName);
-      };
-      const doReject = (err, channelName) => {
-        if (channelName !== this.name) return;
-        this.client.off('subscribe', doResolve);
-        this.client.off('subscribeFail', doReject);
-        reject(err);
-      };
-      this.client.on('subscribe', doResolve);
-      this.client.on('subscribeFail', doReject);
-      this.subscribe();
-    });
-  }.bind(channel);
-  return channel;
-}
+import { ReplaySubject, Subject } from 'rxjs';
 
 /**
  * Gets a tab by ID, returning null if the tab doesn't exist (as opposed to throwing an error)
@@ -82,4 +45,34 @@ export async function navigateTab(tabId, url) {
     chrome.tabs.onRemoved.removeListener(onRemoved);
   }
   return tab;
+}
+
+export class QueueingSubject extends ReplaySubject {
+  constructor() {
+    super();
+    delete this.next;
+  }
+
+  next(value) {
+    if (this.closed || this.observers.length) {
+      Subject.prototype.next.call(this, value);
+    } else {
+      this._events.push(value);
+    }
+  }
+
+  empty() {
+    this._events.splice(0);
+  }
+
+  _subscribe(subscriber) {
+    const subscription = Subject.prototype._subscribe.call(this, subscriber);
+    const len = this._events.length;
+    let i;
+    for (i = 0; i < len && !subscriber.closed; i++) {
+      subscriber.next(this._events[i]);
+    }
+    this._events.splice(0, i);
+    return subscription;
+  }
 }

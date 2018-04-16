@@ -11,19 +11,16 @@
     "@material/textfield": "^0.34.1",
     "chrome-extension-async": "^3.2.4",
     "cssnano": "^4.0.0-rc.2",
-    "rxjs": "^6.0.0-turbo-rc.4",
-    "socketcluster-client": "^11.0.1",
-    "util-promisify": "^2.1.0"
+    "rxjs": "^6.0.0-ucandoit-rc.6"
   },
   "devDependencies": {
     "css-loader": "^0.28.11",
     "eslint": "^4.19.1",
-    "eslint-config-airbnb-base": "^12.1.0",
-    "eslint-plugin-import": "^2.10.0",
+    "eslint-plugin-import": "^2.11.0",
     "mini-css-extract-plugin": "^0.4.0",
     "node-sass": "^4.8.3",
     "optimize-css-assets-webpack-plugin": "^4.0.0",
-    "sass-loader": "^6.0.7",
+    "sass-loader": "^7.0.1",
     "semistandard": "^12.0.1",
     "uglifyjs-webpack-plugin": "^1.2.4",
     "webpack": "^4.5.0",
