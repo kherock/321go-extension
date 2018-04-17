@@ -34,6 +34,7 @@
         "message": "`with` is disallowed in strict mode because it makes code impossible to predict and optimize."
       }
     ],
+    "operator-linebreak": ["error", "before"],
     "space-before-function-paren": ["error", { "named": "never" }]
   }
 }
