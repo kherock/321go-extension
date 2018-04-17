@@ -8,7 +8,7 @@
       "type": "chrome",
       "request": "launch",
       "name": "Chrome: background",
-      "url": "chrome-extension://ijiciiinaplpooielahbhnpgibfpicnh/_generated_background_page.html",
+      "url": "chrome-extension://nmnoheopedgopdcdagagbblaochojppl/_generated_background_page.html",
       "webRoot": "${workspaceRoot}/dist",
       "sourceMaps": true,
       "sourceMapPathOverrides": {
