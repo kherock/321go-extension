@@ -12,7 +12,7 @@ import { websocket } from 'rxjs/websocket';
 import url from 'url';
 
 import { WS_ENDPOINT } from '../env';
-import { getTab, navigateTab, QueueingSubject } from '../utils';
+import { getTab, QueueingSubject } from '../utils';
 
 /**
  * A client represents a tab's connection to the server. This also includes several helpers
@@ -96,7 +96,10 @@ export class Client {
       tab = await getTab(this.tabId);
       if (!tab) break;
       if (message.href) {
-        tab = await navigateTab(tab.id, message.href);
+        tab = await getTab(this.tabId);
+        if (tab && tab.url !== message.href) {
+          tab = await chrome.tabs.update(this.tabId, { url });
+        }
         if (!tab) break;
       } else {
         // this is a new room, let's give it a URL to work with
@@ -155,9 +158,6 @@ export class Client {
   }
 
   async execContentScript() {
-    return chrome.tabs.executeScript(this.tabId, {
-      file: '321go.js',
-      allFrames: true,
-    });
+    return chrome.tabs.executeScript(this.tabId, { file: '321go.js' });
   }
 }

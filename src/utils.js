@@ -12,41 +12,6 @@ export async function getTab(tabId) {
   }
 }
 
-/**
- * Navigates a tab to an optionally specified url and waits for the status to be complete.
- * @param {number} tabId
- * @param {string} [url]
- * @returns {Promise<Tab>} A promise that resolves with the updated tab.
- */
-export async function navigateTab(tabId, url) {
-  let tab;
-  try {
-    tab = await chrome.tabs.get(tabId);
-    if (url && tab.url !== url) {
-      tab = await chrome.tabs.update(tabId, { url });
-    }
-  } catch (err) {
-    return null;
-  }
-  if (tab.status === 'loading') {
-    let onUpdated;
-    let onRemoved;
-    tab = await Promise.race([
-      new Promise(resolve => chrome.tabs.onUpdated.addListener(onUpdated = (id, changeInfo, updatedTab) => {
-        if (id !== tab.id || changeInfo.status !== 'complete') return;
-        resolve(updatedTab);
-      })),
-      new Promise(resolve => chrome.tabs.onRemoved.addListener(onRemoved = (id) => {
-        if (id !== tab.id) return;
-        resolve(null);
-      })),
-    ]);
-    chrome.tabs.onUpdated.removeListener(onUpdated);
-    chrome.tabs.onRemoved.removeListener(onRemoved);
-  }
-  return tab;
-}
-
 export class QueueingSubject extends ReplaySubject {
   constructor() {
     super();

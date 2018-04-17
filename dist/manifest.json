@@ -13,6 +13,17 @@
     "default_title": "321go",
     "default_popup": "popup/popup.html"
   },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.rapidvideo.com/e/*",
+        "https://openload.co/embed/*",
+        "https://streamango.com/embed/*"
+      ],
+      "js": ["321go.js"],
+      "all_frames": true
+    }
+  ],
   "background": {
     "scripts": [
       "background.js"

@@ -2,7 +2,7 @@ import 'chrome-extension-async';
 import url from 'url';
 
 import { ENDPOINT } from '../env';
-import { navigateTab } from '../utils';
+import { getTab } from '../utils';
 import { Client } from './client';
 
 const clients = new Map();
@@ -92,7 +92,7 @@ function initTabPort(port) {
   port.onMessage.addListener(handleTabMessage);
   port.onDisconnect.addListener(async () => {
     client.port = null;
-    const newTab = await navigateTab(client.tabId);
+    const newTab = await getTab(client.tabId);
     if (newTab && client.room.value.id) {
       await client.execContentScript();
     }
