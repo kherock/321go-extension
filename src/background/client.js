@@ -1,12 +1,15 @@
-import { BehaviorSubject, Subject, Observable } from 'rxjs';
+import { BehaviorSubject, Observable, Subject, interval, merge, timer } from 'rxjs';
 import {
   catchError,
+  delay,
   distinctUntilKeyChanged,
   filter,
+  mapTo,
   mergeMapTo,
   retryWhen,
   share,
   switchMap,
+  tap,
 } from 'rxjs/operators';
 import { websocket } from 'rxjs/websocket';
 import url from 'url';
@@ -23,9 +26,19 @@ export class Client {
     this.tabId = tabId;
     this.port = null;
     this.popup = popupPort;
-    this.room = new BehaviorSubject({});
+    this.room = new BehaviorSubject({ id: null });
+
+    this.status = new BehaviorSubject('closed');
 
     const openObserver = new Subject();
+    const closeObserver = new Subject();
+    const timeout = new Subject().pipe(switchMap(() => timer(30e3)));
+    merge(
+      openObserver.pipe(mapTo('open')),
+      closeObserver.pipe(mapTo('closed')),
+      timeout.pipe(mapTo('timeout')),
+    ).subscribe(this.status);
+
     this.socket = Subject.create(new QueueingSubject(), this.room.pipe(
       distinctUntilKeyChanged('id'),
       switchMap(room => new Observable((subscriber) => {
@@ -33,21 +46,45 @@ export class Client {
 
         const socketSubject = websocket({
           url: url.format({ ...WS_ENDPOINT, pathname: room.id }),
+          binaryType: 'arraybuffer',
+          deserializer: ev => ev.data instanceof ArrayBuffer ? ev.data : JSON.parse(ev.data),
+          serializer: value => value instanceof ArrayBuffer ? value : JSON.stringify(value),
           openObserver,
+          closeObserver,
         });
-        const subscription = socketSubject.subscribe(subscriber);
-        subscription.add(openObserver.pipe(mergeMapTo(this.socket.destination)).subscribe(socketSubject));
+
+        const heartbeat = new Subject().pipe(
+          switchMap(() => interval(10e3)),
+          mapTo(new ArrayBuffer(0)),
+        );
+
+        const subscription = socketSubject.asObservable().pipe(
+          tap(() => heartbeat.next()),
+          tap(() => timeout.next()),
+          filter(message => !(message instanceof ArrayBuffer)),
+        ).subscribe(subscriber);
+
+        // flush queued messages after open
+        subscription.add(openObserver.pipe(
+          mergeMapTo(this.socket.destination),
+        ).subscribe(socketSubject));
+
+        // start sending heartbeats
+        subscription.add(heartbeat.subscribe(socketSubject));
+
         return () => subscription.unsubscribe();
       })),
       share(),
       retryWhen(errors => errors.pipe(
         filter(err => err.target instanceof WebSocket),
+        delay(1e3),
       )),
       catchError((err) => {
         console.error(err.stack);
         return [];
       }),
     ));
+
     this.room.pipe(
       distinctUntilKeyChanged('id'),
       catchError((err) => {
@@ -99,9 +136,8 @@ export class Client {
       if (message.href) {
         tab = await getTab(this.tabId);
         if (tab && tab.url !== message.href) {
-          tab = await chrome.tabs.update(this.tabId, { url });
+          await chrome.tabs.update(tab.id, { url: message.href });
         }
-        if (!tab) break;
       } else {
         // this is a new room, let's give it a URL to work with
         this.socket.next({
@@ -160,6 +196,6 @@ export class Client {
   }
 
   async execContentScript() {
-    return chrome.tabs.executeScript(this.tabId, { file: '321go.js' });
+    return chrome.tabs.executeScript(this.tabId, { file: '321go.js', allFrames: true });
   }
 }
