@@ -58,6 +58,7 @@ async function handlePopupMessage(message, port) {
       if (client.port) {
         client.port.postMessage({ type: 'UNOBSERVE_MEDIA' });
         client.port.postMessage({ type: 'OBSERVE_MEDIA' });
+        client.setBrowserActionIcon('active');
       } else {
         await client.execContentScript();
       }
@@ -117,17 +118,6 @@ function initPopupPort(port) {
   });
 }
 
-// wait for things to connect to the background script
-chrome.runtime.onConnect.addListener((port) => {
-  if (port.sender.id !== chrome.runtime.id) {
-    port.disconnect();
-  } else if (port.sender.tab) {
-    initTabPort(port);
-  } else {
-    initPopupPort(port);
-  }
-});
-
 chrome.tabs.onRemoved.addListener((tabId) => {
   const client = clients.get(tabId);
   if (client) {
@@ -148,5 +138,16 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
       href: changeInfo.url,
     });
     client.socket.next({ type: 'URL', href: changeInfo.url });
+  }
+});
+
+// wait for things to connect to the background script
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.sender.id !== chrome.runtime.id) {
+    port.disconnect();
+  } else if (port.sender.tab) {
+    initTabPort(port);
+  } else {
+    initPopupPort(port);
   }
 });

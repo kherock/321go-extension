@@ -86,6 +86,7 @@ export class Client {
     if (this.popup) {
       this.popup.postMessage({ type: 'LEAVE_ROOM' });
     }
+    this.setBrowserActionBadgeText('');
     this.setBrowserActionIcon('rest');
   }
 
@@ -143,11 +144,12 @@ export class Client {
     const hasPermission = await chrome.permissions.contains({
       origins: [tab.url],
     });
-    await chrome.browserAction.setBadgeText({
-      text: !hasPermission ? '!' : '',
-      tabId: this.tabId,
-    });
+    await this.setBrowserActionBadgeText(!hasPermission ? '!' : '');
     return hasPermission;
+  }
+
+  async setBrowserActionBadgeText(text) {
+    return chrome.browserAction.setBadgeText({ text, tabId: this.tabId });
   }
 
   async setBrowserActionIcon(state) {
