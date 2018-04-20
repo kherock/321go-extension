@@ -1,4 +1,23 @@
-import { ReplaySubject, Subject } from 'rxjs';
+import { ReplaySubject, Subject, fromEventPattern } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
+
+/**
+ * Creates a Subject that emits values from a port and posts messages to it.
+ * @param {Port} port
+ */
+export function getPortSubject(port) {
+  const disconnect$ = fromEventPattern(handler => port.onDisconnect.addListener(handler));
+  const destination = new Subject().pipe(takeUntil(disconnect$));
+  destination.subscribe(message => port.postMessage(message));
+  return Subject.create(
+    destination,
+    fromEventPattern(
+      handler => port.onMessage.addListener(handler),
+      handler => port.onMessage.removeListener(handler),
+      message => message,
+    ).pipe(takeUntil(disconnect$)),
+  );
+}
 
 /**
  * Gets a tab by ID, returning null if the tab doesn't exist (as opposed to throwing an error)

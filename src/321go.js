@@ -5,7 +5,6 @@ import {
   Subscription,
   concat,
   fromEvent,
-  fromEventPattern,
   interval,
   merge,
 } from 'rxjs';
@@ -19,12 +18,11 @@ import {
   share,
   switchMap,
   take,
-  takeUntil,
   takeWhile,
   tap,
 } from 'rxjs/operators';
 import url from 'url';
-import { QueueingSubject } from './utils';
+import { QueueingSubject, getPortSubject } from './utils';
 
 export let href = location.href;
 
@@ -153,16 +151,8 @@ function observeElement() {
 }
 
 function observePort() {
-  const port = self === top ? chrome.runtime.connect() : undefined;
   return self === top
-    ? Subject.create( // top frame
-      new Subscriber(message => port.postMessage(message)),
-      fromEventPattern(
-        handler => port.onMessage.addListener(handler),
-        handler => port.onMessage.removeListener(handler),
-        message => message,
-      ).pipe(takeUntil(fromEventPattern(handler => port.onDisconnect.addListener(handler)))),
-    )
+    ? getPortSubject(chrome.runtime.connect())
     : Subject.create( // sub-frame
       new Subscriber(message => top.postMessage({ ...message, runtimeId: chrome.runtime.id }, '*')),
       fromEvent(self, 'message').pipe(

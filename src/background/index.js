@@ -1,76 +1,16 @@
 import 'chrome-extension-async';
-import url from 'url';
 
-import { ENDPOINT } from '../env';
-import { getTab } from '../utils';
+import { getTab, getPortSubject } from '../utils';
 import { Client } from './client';
+import { Observable, concat } from 'rxjs';
+import { distinctUntilKeyChanged, switchMap } from 'rxjs/operators';
 
 const clients = new Map();
 
-function createTabClient(tabId, popupPort) {
-  const client = new Client(tabId, popupPort);
+function createTabClient(tabId) {
+  const client = new Client(tabId);
   clients.set(tabId, client);
   return client;
-}
-
-async function fetchNewRoom() {
-  const res = await fetch(url.format(ENDPOINT), { method: 'POST' });
-  if (!res.ok) throw new Error(res.statusText);
-  return res.text();
-}
-
-/**
- * onMessage handler for events from the content script.
- * @param {object} message
- * @param {Port} port
- */
-async function handleTabMessage(message, port) {
-  const client = clients.get(port.sender.tab.id);
-  if (message.type === 'URL') {
-    client.room.href = message.href;
-  }
-  try {
-    client.socket.next(message);
-  } catch (err) {
-    console.error(err.stack);
-  }
-}
-
-/**
- * onMessage handler for events from the popup page.
- * @param {object} message
- * @param {Port} port
- */
-async function handlePopupMessage(message, port) {
-  try {
-    let client = clients.get(message.tab);
-    if (client) client.popup = port;
-    switch (message.type) {
-    case 'CREATE_ROOM':
-      client = client || createTabClient(message.tab, port);
-      client.joinRoom(await fetchNewRoom());
-      break;
-    case 'JOIN_ROOM':
-      client = client || createTabClient(message.tab, port);
-      client.joinRoom(message.roomId);
-      break;
-    case 'RESYNC_MEDIA':
-      if (client.port) {
-        await client.observeMedia();
-      } else {
-        await client.execContentScript();
-      }
-      await client.updateBrowserActionPermissionStatus();
-      break;
-    case 'LEAVE_ROOM':
-      client.leaveRoom();
-      break;
-    default:
-      console.error('Encountered unkown popup message:', message);
-    }
-  } catch (err) {
-    console.error(err.stack);
-  }
 }
 
 /**
@@ -83,18 +23,15 @@ function initTabPort(port) {
   const { tab } = port.sender;
   // create a client for each tab
   const client = clients.get(tab.id);
-  client.port = port;
-  if (client.room.value.id) {
-    client.observeMedia();
-  }
-  port.onMessage.addListener(handleTabMessage);
-  port.onDisconnect.addListener(async () => {
+  client.port = getPortSubject(port);
+  client.port.subscribe(message => client.socket.next(message), null, async () => {
     client.port = null;
     const newTab = await getTab(client.tabId);
     if (newTab && client.room.value.id) {
       await client.execContentScript();
     }
   });
+  client.observeMedia();
 }
 
 /**
@@ -106,13 +43,20 @@ function initPopupPort(port) {
   for (const [tabId, client] of clients) {
     roomMap[tabId] = client.room.value.id;
   }
+  const portSubject = getPortSubject(port);
+  portSubject.pipe(
+    distinctUntilKeyChanged('tab'),
+    switchMap((message) => Observable.create(() => {
+      const client = clients.get(message.tab) || createTabClient(message.tab);
+      const subscription = client.popup.destination.subscribe(portSubject);
+      subscription.add(concat(
+        [message],
+        portSubject,
+      ).subscribe(value => client.popup.source.next(value)));
+      return () => subscription.unsubscribe();
+    })),
+  ).subscribe();
   port.postMessage(roomMap);
-  port.onMessage.addListener(handlePopupMessage);
-  port.onDisconnect.addListener(() => {
-    for (const client of clients.values()) {
-      if (client.popup === port) client.popup = null;
-    }
-  });
 }
 
 chrome.tabs.onRemoved.addListener((tabId) => {
@@ -130,10 +74,6 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (!client) return;
   client.updateBrowserActionPermissionStatus();
   if (changeInfo.url !== client.room.value.href) {
-    client.room.next({
-      ...client.room.value,
-      href: changeInfo.url,
-    });
     client.socket.next({ type: 'URL', href: changeInfo.url });
   }
 });

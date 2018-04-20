@@ -14,18 +14,24 @@ import {
 import { websocket } from 'rxjs/websocket';
 import url from 'url';
 
-import { WS_ENDPOINT } from '../env';
-import { getTab, QueueingSubject } from '../utils';
+import { ENDPOINT, WS_ENDPOINT } from '../env';
+import { QueueingSubject, getTab } from '../utils';
+
+async function fetchNewRoom() {
+  const res = await fetch(url.format(ENDPOINT), { method: 'POST' });
+  if (!res.ok) throw new Error(res.statusText);
+  return res.text();
+}
 
 /**
  * A client represents a tab's connection to the server. This also includes several helpers
  * that manage the browser action icon and communicate with a popup port when it is present.
  */
 export class Client {
-  constructor(tabId, popupPort = null) {
+  constructor(tabId) {
     this.tabId = tabId;
     this.port = null;
-    this.popup = popupPort;
+    this.popup = Subject.create(new Subject(), new Subject());
     this.room = new BehaviorSubject({ id: null });
 
     this.status = new BehaviorSubject('closed');
@@ -87,12 +93,11 @@ export class Client {
 
     this.room.pipe(
       distinctUntilKeyChanged('id'),
-      catchError((err) => {
-        console.error(err.stack);
-        return this.room;
-      }),
-    ).subscribe(() => this.socket.destination.empty());
+      tap(() => this.socket.destination.empty()),
+    ).subscribe();
+
     this.socket.subscribe(this.handleRoomMessage.bind(this));
+    this.popup.subscribe(this.handlePopupMessage.bind(this));
   }
 
   /**
@@ -104,9 +109,7 @@ export class Client {
    */
   joinRoom(roomId) {
     this.room.next({ id: roomId });
-    if (this.popup) {
-      this.popup.postMessage({ type: 'JOIN_ROOM', roomId });
-    }
+    this.popup.next({ type: 'JOIN_ROOM', roomId });
     return roomId;
   }
 
@@ -118,11 +121,9 @@ export class Client {
   leaveRoom() {
     this.room.next({ id: null });
     if (this.port) {
-      this.port.postMessage({ type: 'UNOBSERVE_MEDIA' });
+      this.port.next({ type: 'UNOBSERVE_MEDIA' });
     }
-    if (this.popup) {
-      this.popup.postMessage({ type: 'LEAVE_ROOM' });
-    }
+    this.popup.next({ type: 'LEAVE_ROOM' });
     this.setBrowserActionBadgeText('');
     this.setBrowserActionIcon('rest');
   }
@@ -133,9 +134,10 @@ export class Client {
     case 'SYNCHRONIZE':
       tab = await getTab(this.tabId);
       if (!tab) break;
+      const room = { ...this.room.value };
       if (message.href) {
-        tab = await getTab(this.tabId);
-        if (tab && tab.url !== message.href) {
+        room.href = message.href;
+        if (tab.url !== message.href) {
           await chrome.tabs.update(tab.id, { url: message.href });
         }
       } else {
@@ -145,6 +147,7 @@ export class Client {
           href: tab.url,
         });
       }
+      this.room.next(room);
       if (this.port) {
         await this.observeMedia();
       } else {
@@ -152,8 +155,8 @@ export class Client {
         const hasPermission = await this.updateBrowserActionPermissionStatus();
         if (hasPermission) {
           await this.execContentScript();
-        } else if (this.popup) {
-          this.popup.postMessage({
+        } else {
+          this.popup.next({
             type: 'PERMISSION_REQUIRED',
             origin: message.href,
           });
@@ -168,9 +171,42 @@ export class Client {
       break;
     default:
       if (this.port) {
-        this.port.postMessage(message);
+        this.port.next(message);
       }
       break;
+    }
+  }
+
+  /**
+   * onMessage handler for events from the popup page.
+   * @param {object} message
+   * @param {Port} port
+   */
+  async handlePopupMessage(message) {
+    try {
+      switch (message.type) {
+      case 'CREATE_ROOM':
+        this.joinRoom(await fetchNewRoom());
+        break;
+      case 'JOIN_ROOM':
+        this.joinRoom(message.roomId);
+        break;
+      case 'RESYNC_MEDIA':
+        if (this.port) {
+          await this.observeMedia();
+        } else {
+          await this.execContentScript();
+        }
+        await this.updateBrowserActionPermissionStatus();
+        break;
+      case 'LEAVE_ROOM':
+        this.leaveRoom();
+        break;
+      default:
+        console.error('Encountered unkown popup message:', message);
+      }
+    } catch (err) {
+      console.error(err.stack);
     }
   }
 
@@ -199,7 +235,7 @@ export class Client {
   }
 
   async observeMedia() {
-    this.port.postMessage({
+    this.port.next({
       type: 'OBSERVE_MEDIA',
       state: this.room.value.state,
       currentTime: this.room.value.currentTime,
