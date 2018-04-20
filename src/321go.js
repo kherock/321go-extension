@@ -54,7 +54,7 @@ function observeMedia(element) {
       break;
     case 'PLAYING':
       suppressEvents = true;
-      element.currentTime = message.currentTime;
+      element.currentTime = message.currentTime + (Date.now() - message.updateTime) / 1000;
       await element.play();
       await new Promise(resolve => setTimeout(resolve));
       suppressEvents = false;
@@ -76,17 +76,17 @@ function observeMedia(element) {
       map(ev => ({
         type: 'PLAYING',
         currentTime: ev.target.currentTime,
-      }))
+      })),
     ),
     fromEvent(element, 'pause').pipe(
       map(ev => ({
         type: 'PAUSE',
         currentTime: ev.target.currentTime,
-      }))
+      })),
     ),
   ).pipe(
     filter(() => !suppressEvents),
-    tap(ev => console.log(ev.type.toLowerCase()))
+    tap(ev => console.log(ev.type.toLowerCase())),
   ));
 }
 

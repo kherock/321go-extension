@@ -152,6 +152,7 @@ export class Client {
         href: message.href || tab.url,
         state: message.state,
         currentTime: message.currentTime,
+        updateTime: Date.now() - 500,
       });
       if (message.href && message.href !== tab.url) {
         await chrome.tabs.update(tab.id, { url: message.href });
@@ -186,23 +187,24 @@ export class Client {
       }
       break;
     default:
-      if (this.port) {
-        this.port.next(message);
-      }
       if (message.type === 'PLAYING') {
+        message.updateTime = Date.now() - 100;
         this.room.next({
           ...this.room.value,
           state: 'playing',
           currentTime: message.currentTime,
-          serverTime: message.serverTime,
+          updateTime: message.updateTime,
         });
       } else if (message.type === 'PAUSE') {
         this.room.next({
           ...this.room.value,
           state: 'paused',
           currentTime: message.currentTime,
-          serverTime: undefined,
+          updateTime: undefined,
         });
+      }
+      if (this.port) {
+        this.port.next(message);
       }
       break;
     }
@@ -273,8 +275,8 @@ export class Client {
       case 'playing':
         this.port.next({
           type: 'PLAYING',
-          serverTime: room.serverTime,
           currentTime: room.currentTime,
+          updateTime: room.updateTime,
         });
         break;
       case 'paused':

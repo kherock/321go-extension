@@ -1,6 +1,6 @@
 import 'chrome-extension-async';
 
-import { getTab, getPortSubject } from '../utils';
+import { getPortSubject } from '../utils';
 import { Client } from './client';
 import { Observable, concat } from 'rxjs';
 import { distinctUntilKeyChanged, switchMap } from 'rxjs/operators';
