@@ -2,7 +2,7 @@
   "author": "Kyle Herock",
   "name": "321go",
   "description": "Watch videos together with friends",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvD15msi+sQ27zCAJdLtgIThugs8RN+jVXZJ0GH2KqovfHCAtcTc4mU5Jy09DtBX+zSl3wb5aSZjgq4evb4bI/xGdnq3EFCyhLZSnjC4uFHYeYmFnhcEpGqFRBkPUPgYP/j4O3zRaO3fu1xT3A7+nwn+rmQ3Vo9KkFG1z94BX15IBwGK8k0iKVYBfovbilTlbgVpQny3qmNWjxY3k4a02NuO+kaWq0MpbEbIughvJoAPza7fnX6zpPnbwKjrEMFrpV4U2dJK72Aj52IAtP+YgfTB8KxYt+AOJB4vPLV5EJL6XjtiJWVf0OBC5AO9fwgeskYz8r4hy3f2dMBLdUdSjqQIDAQAB",
   "manifest_version": 2,
   "icons": {
