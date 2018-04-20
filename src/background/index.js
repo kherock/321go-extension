@@ -56,9 +56,7 @@ async function handlePopupMessage(message, port) {
       break;
     case 'RESYNC_MEDIA':
       if (client.port) {
-        client.port.postMessage({ type: 'UNOBSERVE_MEDIA' });
-        client.port.postMessage({ type: 'OBSERVE_MEDIA' });
-        client.setBrowserActionIcon('active');
+        await client.observeMedia();
       } else {
         await client.execContentScript();
       }
@@ -87,8 +85,7 @@ function initTabPort(port) {
   const client = clients.get(tab.id);
   client.port = port;
   if (client.room.value.id) {
-    port.postMessage({ type: 'OBSERVE_MEDIA' });
-    client.setBrowserActionIcon('active');
+    client.observeMedia();
   }
   port.onMessage.addListener(handleTabMessage);
   port.onDisconnect.addListener(async () => {

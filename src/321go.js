@@ -1,196 +1,210 @@
-import { Subject, Subscription, fromEvent, fromEventPattern, interval } from 'rxjs';
 import {
+  Observable,
+  Subject,
+  Subscriber,
+  Subscription,
+  concat,
+  fromEvent,
+  fromEventPattern,
+  interval,
+  merge,
+} from 'rxjs';
+import {
+  concatMap,
+  exhaustMap,
   filter,
-  finalize,
   map,
+  mapTo,
   mergeMap,
+  share,
+  switchMap,
   take,
   takeUntil,
   takeWhile,
   tap,
 } from 'rxjs/operators';
+import url from 'url';
+import { QueueingSubject } from './utils';
 
-export let href = self.location.href;
+export let href = location.href;
 
-// communication channel between window frames and the chrome background script
-const port = self === top ? chrome.runtime.connect() : undefined;
-const portBroker = self === top
-  ? Subject.create( // top frame
-    new Subject().subscribe(message => port.postMessage(message)),
-    fromEventPattern(
-      handler => port.onMessage.addListener(handler),
-      handler => port.onMessage.removeListener(handler),
-      message => message,
-    ).pipe(takeUntil(fromEventPattern(handler => port.onDisconnect.addListener(handler)))),
-  )
-  : Subject.create( // sub-frame
-    new Subject().subscribe(message => top.postMessage({ ...message, runtimeId: chrome.runtime.id }, '*')),
-    fromEvent(self, 'message').pipe(
-      filter(ev => ev.source === top && ev.data.runtimeId === chrome.runtime.id),
-      map(ev => ev.data),
-    ).pipe(takeWhile(message => message.type !== 'FRAME_DESTROY')),
-  );
+const urlChange$ = new Subject();
 
-let frameBroker;
-
-let mediaSubscription;
-
-let mediaElement;
-let suppressEvents = false;
-
-const observer = new MutationObserver(() => {
-  portBroker.next({
-    type: 'URL',
-    href: location.href,
-  });
-  console.log(location.href);
-});
-
-function playingHandler(ev) {
-  if (suppressEvents) return;
-  portBroker.next({
-    type: 'PLAYING',
-    currentTime: mediaElement.currentTime,
-  });
-  console.log('playing');
-}
-
-function pauseHandler(ev) {
-  if (suppressEvents) return;
-  portBroker.next({
-    type: 'PAUSE',
-    currentTime: mediaElement.currentTime,
-  });
-  console.log('pause');
-}
-
-function observeElement(element) {
-  mediaSubscription = new Subscription();
-  mediaSubscription.add(fromEvent(element, 'playing').subscribe(playingHandler));
-  mediaSubscription.add(fromEvent(element, 'pause').subscribe(pauseHandler));
-}
-
-async function observeFrame(element, selector = 'video') {
-  // poll the frame to observe until it says it's ready
-  const runtimeId = chrome.runtime.id;
-  return interval(100).pipe(
-    map(() => element.contentWindow),
-    tap(frame => frame.postMessage({ type: 'OBSERVE_MEDIA', selector, runtimeId }, '*')),
-    mergeMap(frame => fromEvent(self, 'message').pipe(
-      filter(ev => ev.source === frame && ev.data.runtimeId === runtimeId),
-      map(ev => ev.data),
-      filter(message => message.type === 'FRAME_READY'),
-      map(() => Subject.create(
-        new Subject().subscribe(message => frame.postMessage({ ...message, runtimeId }, '*')),
-        fromEvent(self, 'message').pipe(
-          filter(ev => ev.source === frame && ev.data.runtimeId === runtimeId),
-          map(ev => ev.data),
-          takeUntil(portBroker.toPromise()),
-          finalize(() => frame.postMessage({ type: 'FRAME_DESTROY', runtimeId }, '*')),
-        ),
-      )),
-    )),
-    take(1),
-  ).toPromise();
-}
-
-async function observeMedia(selector) {
-  let element;
-  if (selector) {
-    element = document.querySelector(selector);
-  } else {
-    if (window['movie_player']) { // YouTube
-      element = document.querySelector('.html5-main-video');
-    } else if (window['divContentVideo']) { // KissAnime
-      element = document.querySelector('#divContentVideo > iframe');
-    }
-  }
-
-  if (element) {
-    observer.observe(element, {
-      attributes: true,
-      attributeFilter: ['src'],
-    });
-    if (element instanceof HTMLIFrameElement) {
-      frameBroker = await observeFrame(element);
-      // listen for messages from sub-frames
-      frameBroker.subscribe((message) => {
-        switch (message.type) {
-        case 'FRAME_READY':
-          return;
-        default:
-          delete message.runtimeId;
-          return portBroker.next(message);
-        }
-      });
-    } else {
-      observeElement(element);
-    }
-  }
-  return element;
-}
-
-function unobserveMedia() {
-  observer.disconnect();
-  if (frameBroker) {
-    frameBroker.next({ type: 'UNOBSERVE_MEDIA' });
-    frameBroker = undefined;
-  } else if (mediaElement) {
-    mediaSubscription.unsubscribe();
-    mediaSubscription = null;
+function getMediaSelector() {
+  const urlObj = url.parse(location.href);
+  switch (urlObj.hostname.toLowerCase()) {
+  case 'kissanime.ru':
+    return () => {
+      const videoContainer = window['divContentVideo'];
+      if (!videoContainer) return;
+      return videoContainer.firstElementChild instanceof HTMLIFrameElement
+        ? videoContainer.firstElementChild
+        : videoContainer.querySelector('video');
+    };
+  case 'youtube.com':
+    return () => window['movie_player'].querySelector('.html5-main-video');
+  default:
+    return () => document.querySelector('video');
   }
 }
 
-async function handleMessage(message) {
-  try {
+function observeMedia(element) {
+  let suppressEvents = false;
+  const destination = new Subject().pipe(concatMap(async (message) => {
     switch (message.type) {
+    case 'OBSERVE_MEDIA':
+      break;
     case 'PLAYING':
-      if (!mediaElement) return;
       suppressEvents = true;
-      mediaElement.currentTime = message.currentTime;
-      await mediaElement.play();
+      element.currentTime = message.currentTime;
+      await element.play();
+      await new Promise(resolve => setTimeout(resolve));
+      suppressEvents = false;
       break;
     case 'PAUSE':
-      if (!mediaElement) return;
       suppressEvents = true;
-      mediaElement.currentTime = message.currentTime;
-      await mediaElement.pause();
+      await element.pause();
+      element.currentTime = message.currentTime;
+      await new Promise(resolve => setTimeout(resolve));
+      suppressEvents = false;
       break;
     default:
       console.error('Receieved unexpected message:', message);
     }
-  } catch (err) {
-    console.error(err);
-  } finally {
-    setTimeout(() => (suppressEvents = false));
-  }
+  }));
+  destination.subscribe();
+  return Subject.create(destination, merge(
+    fromEvent(element, 'playing').pipe(
+      map(ev => ({
+        type: 'PLAYING',
+        currentTime: ev.target.currentTime,
+      }))
+    ),
+    fromEvent(element, 'pause').pipe(
+      map(ev => ({
+        type: 'PAUSE',
+        currentTime: ev.target.currentTime,
+      }))
+    ),
+  ).pipe(
+    filter(() => !suppressEvents),
+    tap(ev => console.log(ev.type.toLowerCase()))
+  ));
 }
 
-portBroker.pipe(finalize(unobserveMedia)).subscribe(async (message) => {
-  try {
-    switch (message.type) {
-    case 'OBSERVE_MEDIA':
-      if (mediaElement) return;
-      mediaElement = await observeMedia(message.selector);
-      if (self !== top) {
-        // this is a sub-frame, so send the ready message
-        portBroker.next({ type: 'FRAME_READY' });
+function observeFrame(element) {
+  // poll the frame to observe until it says it's ready
+  const runtimeId = chrome.runtime.id;
+
+  const selfMessages = frame => fromEvent(self, 'message').pipe(
+    filter(ev => ev.source === frame && ev.data.runtimeId === runtimeId),
+    map((ev) => {
+      const message = { ...ev.data };
+      delete message.runtimeId;
+      return message;
+    }),
+  );
+
+  const destination = new QueueingSubject();
+  return Subject.create(destination, interval(100).pipe(
+    map(() => element.contentWindow),
+    tap(frame => frame.postMessage({ type: 'FRAME_PING', runtimeId }, '*')),
+    mergeMap(frame => selfMessages(frame).pipe(
+      filter(msg => msg.type === 'FRAME_PONG'),
+      mapTo(frame),
+    )),
+    take(1),
+    share(),
+    exhaustMap(frame => Observable.create((observer) => {
+      const subscription = selfMessages(frame).subscribe(observer);
+      subscription.add(concat(
+        destination,
+        [{ type: 'FRAME_DESTROY' }],
+      ).subscribe(message => frame.postMessage({ ...message, runtimeId }, '*')));
+      return () => subscription.unsubscribe();
+    })),
+  ));
+}
+
+function observeElement() {
+  const mutationObserver = new MutationObserver(() => urlChange$.next(location.href));
+  const destination = new QueueingSubject();
+  return Subject.create(destination, interval(100).pipe(
+    map(getMediaSelector()),
+    filter(element => element !== undefined),
+    take(1),
+    share(),
+    exhaustMap(element => Observable.create((observer) => {
+      const subject = element instanceof HTMLIFrameElement
+        ? observeFrame(element)
+        : observeMedia(element);
+      const subscription = subject.subscribe(observer);
+      subscription.add(destination.subscribe(subject));
+      mutationObserver.observe(element, {
+        attributes: true,
+        attributeFilter: ['src'],
+      });
+      return () => {
+        mutationObserver.disconnect();
+        subscription.unsubscribe();
+      };
+    })),
+  ));
+}
+
+function observePort() {
+  const port = self === top ? chrome.runtime.connect() : undefined;
+  return self === top
+    ? Subject.create( // top frame
+      new Subscriber(message => port.postMessage(message)),
+      fromEventPattern(
+        handler => port.onMessage.addListener(handler),
+        handler => port.onMessage.removeListener(handler),
+        message => message,
+      ).pipe(takeUntil(fromEventPattern(handler => port.onDisconnect.addListener(handler)))),
+    )
+    : Subject.create( // sub-frame
+      new Subscriber(message => top.postMessage({ ...message, runtimeId: chrome.runtime.id }, '*')),
+      fromEvent(self, 'message').pipe(
+        filter(ev => (ev.source === top || ev.source === self) && ev.data.runtimeId === chrome.runtime.id),
+        map(ev => ev.data),
+        takeWhile(message => message.type !== 'FRAME_DESTROY'),
+      ),
+    );
+}
+
+function main() {
+  const portSubject = observePort();
+  const elementSubject = observeElement();
+
+  portSubject.pipe(
+    filter(message => message.type === 'FRAME_PING'),
+    mapTo({ type: 'FRAME_PONG' }),
+  ).subscribe(portSubject);
+
+  portSubject.pipe(
+    filter(message => message.type.match(/^(UN)?OBSERVE_MEDIA$/)),
+    tap(elementSubject),
+    switchMap(message => Observable.create((observer) => {
+      const subscription = new Subscription();
+      switch (message.type) {
+      case 'OBSERVE_MEDIA':
+        subscription.add(portSubject.subscribe(observer));
+        subscription.add(elementSubject.subscribe(portSubject));
+        break;
+      case 'UNOBSERVE_MEDIA':
+        break;
       }
-      break;
-    case 'UNOBSERVE_MEDIA':
-      unobserveMedia();
-      mediaElement = undefined;
-      break;
-    default:
-      if (frameBroker) {
-        // forward the message to the sub-frame
-        frameBroker.next(message);
-      } else if (mediaElement) {
-        await handleMessage(message);
-      }
-      break;
-    }
-  } catch (err) {
-    console.error(err.stack);
-  }
-});
+      return () => subscription.unsubscribe();
+    })),
+  ).subscribe(elementSubject);
+  urlChange$.subscribe(portSubject);
+}
+
+if (self === top) {
+  main();
+} else {
+  // destroy any existing script instances on this frame before starting
+  observePort().toPromise().then(main);
+  self.postMessage({ type: 'FRAME_DESTROY', runtimeId: chrome.runtime.id }, '*');
+}

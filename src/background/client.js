@@ -146,8 +146,7 @@ export class Client {
         });
       }
       if (this.port) {
-        this.port.postMessage({ type: 'OBSERVE_MEDIA' });
-        this.setBrowserActionIcon('active');
+        await this.observeMedia();
       } else {
         // execute the content script if it hasn't been injected into the page
         const hasPermission = await this.updateBrowserActionPermissionStatus();
@@ -197,5 +196,14 @@ export class Client {
 
   async execContentScript() {
     return chrome.tabs.executeScript(this.tabId, { file: '321go.js', allFrames: true });
+  }
+
+  async observeMedia() {
+    this.port.postMessage({
+      type: 'OBSERVE_MEDIA',
+      state: this.room.value.state,
+      currentTime: this.room.value.currentTime,
+    });
+    await this.setBrowserActionIcon('active');
   }
 }
