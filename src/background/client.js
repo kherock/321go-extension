@@ -5,8 +5,8 @@ import {
   distinctUntilKeyChanged,
   filter,
   mapTo,
-  mergeMapTo,
   retryWhen,
+  switchMapTo,
   share,
   switchMap,
   tap,
@@ -16,6 +16,18 @@ import url from 'url';
 
 import { ENDPOINT, WS_ENDPOINT } from '../env';
 import { QueueingSubject, getTab } from '../utils';
+
+const URL_BLACKLIST = [
+  'http://kissanime.ru/Special/AreYouHuman2',
+];
+
+function isBlacklistedUrl(href) {
+  return URL_BLACKLIST.includes(url.format({
+    ...url.parse(href),
+    hash: null,
+    search: null,
+  }));
+}
 
 async function fetchNewRoom() {
   const res = await fetch(url.format(ENDPOINT), { method: 'POST' });
@@ -72,7 +84,8 @@ export class Client {
 
         // flush queued messages after open
         subscription.add(openObserver.pipe(
-          mergeMapTo(this.socket.destination),
+          switchMapTo(this.socket.destination),
+          filter(message => message.type !== 'URL' || !isBlacklistedUrl(message.href)),
         ).subscribe(socketSubject));
 
         // start sending heartbeats
@@ -150,10 +163,9 @@ export class Client {
             href: tab.url,
           });
         }
-        const hasPermission = await this.updateBrowserActionPermissionStatus();
         if (this.port) {
           await this.observeMedia();
-        } else if (hasPermission) {
+        } else if (await this.updateBrowserActionPermissionStatus()) {
           await this.execContentScript();
         } else {
           this.popup.next({
