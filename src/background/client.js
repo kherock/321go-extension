@@ -134,35 +134,31 @@ export class Client {
     case 'SYNCHRONIZE':
       tab = await getTab(this.tabId);
       if (!tab) break;
-      if (message.href) {
-        if (tab.url !== message.href) {
-          await chrome.tabs.update(tab.id, { url: message.href });
-        }
-      } else {
-        // this is a new room, let's give it a URL to work with
-        this.socket.next({
-          type: 'URL',
-          href: tab.url,
-        });
-      }
       this.room.next({
         ...this.room.value,
         href: message.href || tab.url,
         state: message.state,
         currentTime: message.currentTime,
-        serverTime: message.serverTime,
       });
-      if (this.port) {
-        await this.observeMedia();
+      if (message.href && message.href !== tab.url) {
+        await chrome.tabs.update(tab.id, { url: message.href });
       } else {
-        // execute the content script if it hasn't been injected into the page
+        if (!message.href) {
+          // this is a new room, let's give it a URL to work with
+          this.socket.next({
+            type: 'URL',
+            href: tab.url,
+          });
+        }
         const hasPermission = await this.updateBrowserActionPermissionStatus();
-        if (hasPermission) {
+        if (this.port) {
+          await this.observeMedia();
+        } else if (hasPermission) {
           await this.execContentScript();
         } else {
           this.popup.next({
             type: 'PERMISSION_REQUIRED',
-            origin: message.href,
+            origin: tab.url,
           });
         }
       }

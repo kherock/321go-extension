@@ -24,13 +24,7 @@ function initTabPort(port) {
   // create a client for each tab
   const client = clients.get(tab.id);
   client.port = getPortSubject(port);
-  client.port.subscribe(message => client.socket.next(message), null, async () => {
-    client.port = null;
-    const newTab = await getTab(client.tabId);
-    if (newTab && client.room.value.id) {
-      await client.execContentScript();
-    }
-  });
+  client.port.subscribe(message => client.socket.next(message), null, () => (client.port = null));
   client.observeMedia();
 }
 
@@ -68,12 +62,24 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   }
 });
 
-chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (!changeInfo.url) return;
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   const client = clients.get(tabId);
-  if (!client) return;
-  client.updateBrowserActionPermissionStatus();
-  if (changeInfo.url !== client.room.value.href) {
+  if (!client || !client.room.value.id) return;
+
+  const hasPermission = await client.updateBrowserActionPermissionStatus();
+  // execute the content script if it hasn't been injected into the page
+  if (hasPermission) {
+    if (!client.port && changeInfo.status === 'loading') {
+      await client.execContentScript();
+    }
+  } else if (changeInfo.url) {
+    client.popup.next({
+      type: 'PERMISSION_REQUIRED',
+      origin: changeInfo.url,
+    });
+  }
+
+  if (changeInfo.url && changeInfo.url !== client.room.value.href) {
     client.socket.next({ type: 'URL', href: changeInfo.url });
   }
 });
