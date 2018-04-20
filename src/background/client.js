@@ -25,7 +25,7 @@ async function fetchNewRoom() {
 
 /**
  * A client represents a tab's connection to the server. This also includes several helpers
- * that manage the browser action icon and communicate with a popup port when it is present.
+ * that manage the browser action icon and communicate with a popup port.
  */
 export class Client {
   constructor(tabId) {
@@ -134,9 +134,7 @@ export class Client {
     case 'SYNCHRONIZE':
       tab = await getTab(this.tabId);
       if (!tab) break;
-      const room = { ...this.room.value };
       if (message.href) {
-        room.href = message.href;
         if (tab.url !== message.href) {
           await chrome.tabs.update(tab.id, { url: message.href });
         }
@@ -147,7 +145,13 @@ export class Client {
           href: tab.url,
         });
       }
-      this.room.next(room);
+      this.room.next({
+        ...this.room.value,
+        href: message.href || tab.url,
+        state: message.state,
+        currentTime: message.currentTime,
+        serverTime: message.serverTime,
+      });
       if (this.port) {
         await this.observeMedia();
       } else {
@@ -166,12 +170,31 @@ export class Client {
     case 'URL':
       tab = await getTab(this.tabId);
       if (tab && tab.url !== message.href) {
+        this.room.next({
+          ...this.room.value,
+          href: message.href,
+        });
         await chrome.tabs.update(tab.id, { url: message.href });
       }
       break;
     default:
       if (this.port) {
         this.port.next(message);
+      }
+      if (message.type === 'PLAYING') {
+        this.room.next({
+          ...this.room.value,
+          state: 'playing',
+          currentTime: message.currentTime,
+          serverTime: message.serverTime,
+        });
+      } else if (message.type === 'PAUSE') {
+        this.room.next({
+          ...this.room.value,
+          state: 'paused',
+          currentTime: message.currentTime,
+          serverTime: undefined,
+        });
       }
       break;
     }
@@ -235,11 +258,25 @@ export class Client {
   }
 
   async observeMedia() {
-    this.port.next({
-      type: 'OBSERVE_MEDIA',
-      state: this.room.value.state,
-      currentTime: this.room.value.currentTime,
-    });
+    const room = this.room.value;
+    this.port.next({ type: 'OBSERVE_MEDIA' });
+    if (room.currentTime) {
+      switch (room.state) {
+      case 'playing':
+        this.port.next({
+          type: 'PLAYING',
+          serverTime: room.serverTime,
+          currentTime: room.currentTime,
+        });
+        break;
+      case 'paused':
+        this.port.next({
+          type: 'PAUSE',
+          currentTime: room.currentTime,
+        });
+        break;
+      }
+    }
     await this.setBrowserActionIcon('active');
   }
 }
