@@ -8,9 +8,8 @@ import { MDCRipple } from '@material/ripple';
 import { MDCTextField } from '@material/textfield';
 import { BehaviorSubject } from 'rxjs';
 
-for (const component of [MDCRipple, MDCTextField]) {
-  mdcAutoInit.register(component.name, component);
-}
+mdcAutoInit.register('MDCRipple', MDCRipple);
+mdcAutoInit.register('MDCTextField', MDCTextField);
 mdcAutoInit();
 
 const {
