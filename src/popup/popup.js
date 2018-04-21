@@ -31,6 +31,15 @@ class Popup {
   constructor(tab, roomId) {
     this.tab = tab;
     this.roomId = new BehaviorSubject(roomId);
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+      if (tabId !== this.tab.id) return;
+      Object.assign(this.tab, changeInfo);
+      if (changeInfo.url) this.renderRoomView();
+    });
+  }
+
+  get isSupportedUrl() {
+    return /^https?:/.test(this.tab.url);
   }
 
   initView() {
@@ -42,8 +51,8 @@ class Popup {
       createRoomBtn.disabled = !!value;
       roomIdControl.disabled = !!value;
       submitBtn.disabled = !!value || !roomIdControl.valid || !roomIdControl.value;
-      this.updateRoomView();
-      this.setRoomView();
+      this.renderRoomView();
+      this.setPopupView();
     });
 
     joinRoomForm.roomId.addEventListener('input', (ev) => {
@@ -53,7 +62,7 @@ class Popup {
       if (createRoomBtn.disabled) return;
       createRoomBtn.disabled = true;
       submitBtn.disabled = true;
-      const hasPermission = await chrome.permissions.request({ origins: [this.tab.url] });
+      const hasPermission = !this.isSupportedUrl || await chrome.permissions.request({ origins: [this.tab.url] });
       if (!hasPermission) return;
       port.postMessage({
         tab: this.tab.id,
@@ -89,6 +98,7 @@ class Popup {
     });
 
     port.onMessage.addListener(async (message) => {
+      console.log(message);
       switch (message.type) {
       case 'JOIN_ROOM':
         this.roomId.next(message.roomId);
@@ -97,25 +107,29 @@ class Popup {
         this.roomId.next(null);
         break;
       case 'PERMISSION_REQUIRED':
-        roomView.classList.add('error');
-        roomView.classList.add('permission-error');
-        this.tab = await chrome.tabs.get(this.tab.id);
-        this.updateRoomView();
+        this.renderRoomView();
         break;
       }
     });
   }
 
-  async updateRoomView() {
+  async renderRoomView() {
     roomView.querySelector('.room-id-text').textContent = this.roomId.value;
-    const hasPermission = await chrome.permissions.contains({ origins: [this.tab.url] });
-    if (!hasPermission) {
-      roomView.classList.add('error');
-      roomView.classList.add('permission-error');
+    let hasError = false;
+    let hasPermissionError = false;
+    if (!this.isSupportedUrl) {
+      hasError = true;
+    } else {
+      const hasPermission = await chrome.permissions.contains({ origins: [this.tab.url] });
+      if (!hasPermission) {
+        hasPermissionError = true;
+      }
     }
+    roomView.classList.toggle('error', hasError || hasPermissionError);
+    roomView.classList.toggle('permission-error', hasPermissionError);
   }
 
-  setRoomView() {
+  setPopupView() {
     popupView.classList.toggle('in-room', !!this.roomId.value);
   }
 }

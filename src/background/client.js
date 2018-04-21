@@ -22,11 +22,13 @@ const URL_BLACKLIST = [
 ];
 
 function isBlacklistedUrl(href) {
-  return URL_BLACKLIST.includes(url.format({
-    ...url.parse(href),
-    hash: null,
-    search: null,
-  }));
+  const urlObj = url.parse(href);
+  return (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:')
+    || URL_BLACKLIST.includes(url.format({
+      ...url.parse(href),
+      hash: null,
+      search: null,
+    }));
 }
 
 async function fetchNewRoom() {
