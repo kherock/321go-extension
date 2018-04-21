@@ -129,7 +129,7 @@ function observeElement() {
   const destination = new QueueingSubject();
   return Subject.create(destination, interval(100).pipe(
     map(getMediaSelector()),
-    filter(element => element !== undefined),
+    filter(element => element !== null),
     take(1),
     share(),
     exhaustMap(element => Observable.create((observer) => {
