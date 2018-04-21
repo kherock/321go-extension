@@ -1,6 +1,6 @@
 {
   "name": "321go-extension",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Watch videos together with friends",
   "dependencies": {
     "@material/animation": "^0.34.0",
